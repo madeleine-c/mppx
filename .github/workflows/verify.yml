@@ -12,18 +12,6 @@ permissions:
   contents: read
 
 jobs:
-  ci-gate:
-    name: CI Gate
-    if: always()
-    needs: [checks, test, test-html, test-x402-e2e]
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
-            echo "One or more required jobs failed or were cancelled"
-            exit 1
-          fi
-
   checks:
     name: Checks
     runs-on: ubuntu-latest
@@ -57,22 +45,10 @@ jobs:
         run: pnpm check:ci
 
       - name: Check types
-        run: pnpm dev && pnpm exec tsx scripts/build:html.ts && pnpm check:types && pnpm check:types:html && pnpm check:types:examples
+        run: pnpm dev && pnpm check:types && pnpm check:types:html && pnpm check:types:examples
 
       - name: Check package contents and size
         run: pnpm check:package
-
-  test:
-    name: Test Runtime
-    if: always()
-    needs: [test-runtime]
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
-            echo "One or more runtime test shards failed or were cancelled"
-            exit 1
-          fi
 
   test-runtime:
     name: Test Runtime / ${{ matrix.name }}
@@ -131,7 +107,7 @@ jobs:
         if: matrix.tempo
         id: tempo-digest
         run: |
-          digest=$(docker buildx imagetools inspect ghcr.io/tempoxyz/tempo:${VITE_TEMPO_TAG} --raw | sha256sum | cut -d' ' -f1)
+          digest=$(docker buildx imagetools inspect "ghcr.io/tempoxyz/tempo:${VITE_TEMPO_TAG}" --raw | sha256sum | cut -d' ' -f1)
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
 
       - name: Cache Tempo Docker image
@@ -149,8 +125,8 @@ jobs:
       - name: Pull and cache Tempo image
         if: matrix.tempo && steps.docker-cache.outputs.cache-hit != 'true'
         run: |
-          docker pull ghcr.io/tempoxyz/tempo:${VITE_TEMPO_TAG}
-          docker save ghcr.io/tempoxyz/tempo:${VITE_TEMPO_TAG} -o /tmp/tempo-image.tar
+          docker pull "ghcr.io/tempoxyz/tempo:${VITE_TEMPO_TAG}"
+          docker save "ghcr.io/tempoxyz/tempo:${VITE_TEMPO_TAG}" -o /tmp/tempo-image.tar
 
       - name: Start Tempo localnet
         if: matrix.tempo
@@ -159,7 +135,7 @@ jobs:
           docker run -d \
             --name mppx-tempo-localnet \
             -p 18545:54515 \
-            ghcr.io/tempoxyz/tempo:${VITE_TEMPO_TAG} \
+            "ghcr.io/tempoxyz/tempo:${VITE_TEMPO_TAG}" \
             node \
             --authrpc.port 54545 \
             --datadir /tmp/mppx-tempo-localnet \
@@ -179,7 +155,7 @@ jobs:
             --port 54525 \
             --ws.port 54535
 
-          for attempt in {1..30}; do
+          for _ in {1..30}; do
             if curl -fsS \
               -H 'content-type: application/json' \
               --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' \
@@ -283,7 +259,7 @@ jobs:
             --chain-id 31337 \
             --mnemonic 'test test test test test test test test test test test junk'
 
-          for attempt in {1..30}; do
+          for _ in {1..30}; do
             if curl -fsS \
               -H 'content-type: application/json' \
               --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' \
